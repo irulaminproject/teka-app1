@@ -1,24 +1,675 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seller Center - Teka App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .tab-active { border-bottom: 3px solid #2563EB; color: #2563EB; }
+        .tab-inactive { color: #9CA3AF; }
+    </style>
 </head>
-<body class="bg-slate-50 min-h-screen pb-10">
-    <div class="bg-blue-600 p-6 rounded-b-[40px] shadow-lg mb-6">
-        <h1 class="text-white text-xl font-black">DASHBOARD SELLER</h1>
-        <p class="text-blue-100 text-xs">Kelola pesanan masuk di sini.</p>
+<body class="bg-slate-50 min-h-screen pb-20">
+    <!-- Header -->
+    <div class="bg-gradient-to-r from-blue-600 to-blue-700 p-6 rounded-b-[40px] shadow-lg mb-6">
+        <div class="flex justify-between items-center mb-4">
+            <h1 class="text-white text-xl font-black">SELLER CENTER</h1>
+            <div id="seller-avatar" class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white font-bold">S</div>
+        </div>
+        <p class="text-blue-100 text-xs">Kelola toko dan pesanan Anda</p>
+        <div id="seller-name" class="text-white font-bold mt-2">Loading...</div>
     </div>
-    <div class="px-4">
-        <h2 class="font-bold text-gray-700 mb-4">Pesanan Perlu Diproses</h2>
-        <div id="seller-orders-container" class="space-y-4">
-            <p class="text-center text-gray-400 py-10">Mencari pesanan baru...</p>
+    <!-- Stats Cards -->
+    <div class="px-4 mb-6">
+        <div class="grid grid-cols-2 gap-3">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-shopping-bag text-blue-600 text-sm"></i>
+                    </div>
+                    <span class="text-xs text-gray-500">Total Pesanan</span>
+                </div>
+                <div id="stat-total-orders" class="text-2xl font-black text-gray-800">0</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-wallet text-green-600 text-sm"></i>
+                    </div>
+                    <span class="text-xs text-gray-500">Pendapatan</span>
+                </div>
+                <div id="stat-revenue" class="text-2xl font-black text-gray-800">Rp0</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-clock text-orange-600 text-sm"></i>
+                    </div>
+                    <span class="text-xs text-gray-500">Menunggu</span>
+                </div>
+                <div id="stat-pending" class="text-2xl font-black text-gray-800">0</div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-box text-purple-600 text-sm"></i>
+                    </div>
+                    <span class="text-xs text-gray-500">Produk</span>
+                </div>
+                <div id="stat-products" class="text-2xl font-black text-gray-800">0</div>
+            </div>
+        </div>
+    </div>
+    <!-- Tabs Navigation -->
+    <div class="px-4 mb-4">
+        <div class="flex bg-white rounded-2xl p-1 shadow-sm border border-gray-100">
+            <button onclick="switchTab('orders')" id="tab-orders" class="flex-1 py-3 text-xs font-bold tab-active">Pesanan</button>
+            <button onclick="switchTab('products')" id="tab-products" class="flex-1 py-3 text-xs font-bold tab-inactive">Produk</button>
+            <button onclick="switchTab('history')" id="tab-history" class="flex-1 py-3 text-xs font-bold tab-inactive">Riwayat</button>
+        </div>
+    </div>
+    <!-- Orders Tab -->
+    <div id="content-orders" class="px-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="font-bold text-gray-700">Pesanan Aktif</h2>
+            <button onclick="loadOrders()" class="text-blue-600 text-xs font-bold"><i class="fas fa-sync-alt mr-1"></i> Refresh</button>
+        </div>
+        <div id="orders-container" class="space-y-4">
+            <div class="text-center py-10">
+                <i class="fas fa-spinner fa-spin text-3xl text-gray-300 mb-3"></i>
+                <p class="text-gray-400 text-sm">Memuat pesanan...</p>
+            </div>
+        </div>
+    </div>
+    <!-- Products Tab -->
+    <div id="content-products" class="px-4 hidden">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="font-bold text-gray-700">Daftar Produk</h2>
+            <button onclick="showAddProductModal()" class="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider">
+                <i class="fas fa-plus mr-1"></i> Tambah
+            </button>
+        </div>
+        <div id="products-container" class="space-y-4">
+            <div class="text-center py-10">
+                <i class="fas fa-spinner fa-spin text-3xl text-gray-300 mb-3"></i>
+                <p class="text-gray-400 text-sm">Memuat produk...</p>
+            </div>
+        </div>
+    </div>
+    <!-- History Tab -->
+    <div id="content-history" class="px-4 hidden">
+        <h2 class="font-bold text-gray-700 mb-4">Riwayat Penjualan</h2>
+        <div id="history-container" class="space-y-4">
+            <div class="text-center py-10">
+                <i class="fas fa-spinner fa-spin text-3xl text-gray-300 mb-3"></i>
+                <p class="text-gray-400 text-sm">Memuat riwayat...</p>
+            </div>
+        </div>
+    </div>
+    <!-- Add Product Modal -->
+    <div id="add-product-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center">
+        <div class="bg-white w-full max-w-md rounded-t-[40px] p-6 max-h-[90vh] overflow-y-auto">
+            <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
+            <h3 class="text-lg font-black text-gray-800 mb-6">Tambah Produk Baru</h3>
+            <form id="add-product-form" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-2">Nama Produk</label>
+                    <input type="text" id="product-name" required class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-2">Deskripsi</label>
+                    <textarea id="product-description" rows="3" required class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition text-sm resize-none"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-2">Harga (Rp)</label>
+                        <input type="number" id="product-price" required class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-2">Stok</label>
+                        <input type="number" id="product-stock" required class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-2">URL Gambar</label>
+                    <input type="url" id="product-image" placeholder="https://..." class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition text-sm">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="hideAddProductModal()" class="flex-1 bg-gray-100 text-gray-700 py-3 rounded-xl text-sm font-bold">Batal</button>
+                    <button type="submit" class="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-bold">Simpan Produk</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Order Detail Modal -->
+    <div id="order-detail-modal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end justify-center">
+        <div class="bg-white w-full max-w-md rounded-t-[40px] p-6 max-h-[90vh] overflow-y-auto">
+            <div class="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-6"></div>
+            <div id="order-detail-content"></div>
         </div>
     </div>
     <script src="js/config.js"></script>
     <script src="js/seller.js"></script>
 </body>
 </html>
+$ cat /workspace/web/js/seller.js 2>/dev/null || echo "File tidak ditemukan"
+$ cat /workspace/web/js/seller.js 2>/dev/null || echo "File tidak ditemukan"
+// web/js/seller.js - Seller Center dengan Database Connection
+const tg = window.Telegram.WebApp;
+const _supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_KEY);
+tg.ready();
+tg.expand();
+// State global
+let currentTab = 'orders';
+let sellerId = null;
+// Inisialisasi halaman
+document.addEventListener('DOMContentLoaded', () => {
+    initSeller();
+    loadOrders();
+    setupFormSubmit();
+});
+// Fungsi inisialisasi seller
+async function initSeller() {
+    try {
+        // Ambil data user dari Telegram
+        const user = tg.initDataUnsafe?.user;
+        if (user) {
+            // Cari atau buat profil seller di database
+            const { data: profile, error } = await _supabase
+                .from('profiles')
+                .select('*')
+                .eq('telegram_id', user.id.toString())
+                .single();
+            if (profile) {
+                sellerId = profile.id;
+                document.getElementById('seller-name').textContent = profile.full_name || user.first_name;
+                document.getElementById('seller-avatar').textContent = (profile.full_name || user.first_name)[0].toUpperCase();
+                // Load statistik
+                loadStats(profile.id);
+                loadProducts(profile.id);
+                loadHistory(profile.id);
+            } else {
+                document.getElementById('seller-name').textContent = user.first_name || 'Seller';
+                document.getElementById('seller-avatar').textContent = (user.first_name || 'S')[0].toUpperCase();
+            }
+        } else {
+            document.getElementById('seller-name').textContent = 'Guest Seller';
+        }
+    } catch (error) {
+        console.error('Error initializing seller:', error);
+        document.getElementById('seller-name').textContent = 'Seller';
+    }
+}
+// Switch tab
+function switchTab(tabName) {
+    currentTab = tabName;
+    // Update tab buttons
+    ['orders', 'products', 'history'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        const content = document.getElementById(`content-${t}`);
+        if (t === tabName) {
+            btn.classList.remove('tab-inactive');
+            btn.classList.add('tab-active');
+            content.classList.remove('hidden');
+        } else {
+            btn.classList.remove('tab-active');
+            btn.classList.add('tab-inactive');
+            content.classList.add('hidden');
+        }
+    });
+}
+// Load statistik dashboard
+async function loadStats(sellerIdParam) {
+    try {
+        const sid = sellerIdParam || sellerId;
+        if (!sid) return;
+        // Total orders
+        const { count: totalOrders } = await _supabase
+            .from('orders')
+            .select('*', { count: 'exact', head: true });
+        // Pending orders
+        const { count: pendingOrders } = await _supabase
+            .from('orders')
+            .select('*', { count: 'exact', head: true })
+            .in('status', ['pending', 'processing']);
+        // Revenue (completed orders)
+        const { data: completedOrders } = await _supabase
+            .from('orders')
+            .select('total_price')
+            .eq('status', 'completed');
+        const revenue = completedOrders?.reduce((sum, order) => sum + (order.total_price || 0), 0) || 0;
+        // Products count
+        const { count: productsCount } = await _supabase
+            .from('products')
+            .select('*', { count: 'exact', head: true })
+            .eq('seller_id', sid);
+        document.getElementById('stat-total-orders').textContent = totalOrders || 0;
+        document.getElementById('stat-pending').textContent = pendingOrders || 0;
+        document.getElementById('stat-revenue').textContent = `Rp${revenue.toLocaleString('id-ID')}`;
+        document.getElementById('stat-products').textContent = productsCount || 0;
+    } catch (error) {
+        console.error('Error loading stats:', error);
+    }
+}
+// Load pesanan
+async function loadOrders() {
+    const container = document.getElementById('orders-container');
+    container.innerHTML = `
+        <div class="text-center py-10">
+            <i class="fas fa-spinner fa-spin text-3xl text-gray-300 mb-3"></i>
+            <p class="text-gray-400 text-sm">Memuat pesanan...</p>
+        </div>
+    `;
+    try {
+        const { data: orders, error } = await _supabase
+            .from('orders')
+            .select(`
+                *,
+                profiles(full_name, telegram_id),
+                order_items(
+                    product_id,
+                    quantity,
+                    price,
+                    products(name, image_url)
+                )
+            `)
+            .in('status', ['pending', 'processing', 'shipped'])
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        if (orders && orders.length > 0) {
+            container.innerHTML = orders.map(ord => {
+                const statusColors = {
+                    'pending': 'bg-orange-100 text-orange-600',
+                    'processing': 'bg-blue-100 text-blue-600',
+                    'shipped': 'bg-purple-100 text-purple-600',
+                    'completed': 'bg-green-100 text-green-600',
+                    'cancelled': 'bg-red-100 text-red-600'
+                };
+                const statusLabels = {
+                    'pending': 'Menunggu Konfirmasi',
+                    'processing': 'Diproses',
+                    'shipped': 'Dikirim',
+                    'completed': 'Selesai',
+                    'cancelled': 'Dibatalkan'
+                };
+                return `
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100" onclick="showOrderDetail('${ord.id}')">
+                        <div class="flex justify-between items-start mb-3">
+                            <div>
+                                <span class="text-[10px] font-bold text-gray-400 uppercase">Order #${ord.id.slice(0,8)}</span>
+                                <h3 class="font-bold text-gray-800 text-sm mt-1">${ord.profiles?.full_name || 'Pembeli'}</h3>
+                            </div>
+                            <span class="${statusColors[ord.status] || 'bg-gray-100 text-gray-600'} text-[10px] px-3 py-1 rounded-lg font-bold">${statusLabels[ord.status] || ord.status}</span>
+                        </div>
+                        <div class="flex items-center gap-2 mb-3">
+                            ${ord.order_items?.slice(0, 3).map(item => `
+                                <div class="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden">
+                                    ${item.products?.image_url ?
+                                        `<img src="${item.products.image_url}" class="w-full h-full object-cover">` :
+                                        '<div class="w-full h-full flex items-center justify-center text-gray-400"><i class="fas fa-image"></i></div>'
+                                    }
+                                </div>
+                            `).join('')}
+                            ${ord.order_items?.length > 3 ? `<div class="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center text-xs font-bold text-gray-600">+${ord.order_items.length - 3}</div>` : ''}
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-gray-500">${new Date(ord.created_at).toLocaleDateString('id-ID')}</span>
+                            <span class="text-lg font-black text-blue-600">Rp${ord.total_price?.toLocaleString('id-ID') || '0'}</span>
+                        </div>
+                        ${ord.status === 'pending' ? `
+                            <div class="flex gap-2 mt-3">
+                                <button onclick="event.stopPropagation(); updateOrderStatus('${ord.id}', 'processing')" class="flex-1 bg-blue-600 text-white py-2 rounded-xl text-xs font-bold uppercase">Proses</button>
+                                <button onclick="event.stopPropagation(); updateOrderStatus('${ord.id}', 'cancelled')" class="flex-1 bg-red-100 text-red-600 py-2 rounded-xl text-xs font-bold uppercase">Tolak</button>
+                            </div>
+                        ` : ''}
+                        ${ord.status === 'processing' ? `
+                            <button onclick="event.stopPropagation(); updateOrderStatus('${ord.id}', 'shipped')" class="w-full mt-3 bg-green-600 text-white py-2 rounded-xl text-xs font-bold uppercase">Kirim Pesanan</button>
+                        ` : ''}
+                    </div>
+                `;
+            }).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-10">
+                    <i class="fas fa-inbox text-5xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-400 text-sm">Belum ada pesanan aktif</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading orders:', error);
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-exclamation-circle text-5xl text-red-300 mb-4"></i>
+                <p class="text-red-400 text-sm">Gagal memuat pesanan</p>
+                <button onclick="loadOrders()" class="mt-4 text-blue-600 text-xs font-bold">Coba Lagi</button>
+            </div>
+        `;
+    }
+}
+// Tampilkan detail pesanan
+async function showOrderDetail(orderId) {
+    try {
+        const { data: order, error } = await _supabase
+            .from('orders')
+            .select(`
+                *,
+                profiles(full_name, telegram_id, phone, address),
+                order_items(
+                    product_id,
+                    quantity,
+                    price,
+                    products(name, image_url)
+                )
+            `)
+            .eq('id', orderId)
+            .single();
+        if (error) throw error;
+        const statusColors = {
+            'pending': 'bg-orange-100 text-orange-600',
+            'processing': 'bg-blue-100 text-blue-600',
+            'shipped': 'bg-purple-100 text-purple-600',
+            'completed': 'bg-green-100 text-green-600',
+            'cancelled': 'bg-red-100 text-red-600'
+        };
+        const content = document.getElementById('order-detail-content');
+        content.innerHTML = `
+            <div class="space-y-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-black text-gray-800">Detail Pesanan</h3>
+                    <button onclick="hideOrderDetail()" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-xl">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs text-gray-500">Order ID</span>
+                        <span class="text-sm font-bold text-gray-700">#${order.id.slice(0,8)}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-gray-500">Tanggal</span>
+                        <span class="text-sm font-bold text-gray-700">${new Date(order.created_at).toLocaleString('id-ID')}</span>
+                    </div>
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="text-xs text-gray-500">Status</span>
+                        <span class="${statusColors[order.status]} text-xs px-3 py-1 rounded-lg font-bold">${order.status}</span>
+                    </div>
+                </div>
+                <div>
+                    <h4 class="font-bold text-gray-700 mb-3 text-sm">Produk</h4>
+                    <div class="space-y-3">
+                        ${order.order_items?.map(item => `
+                            <div class="flex gap-3 items-center">
+                                <div class="w-16 h-16 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                                    ${item.products?.image_url ?
+                                        `<img src="${item.products.image_url}" class="w-full h-full object-cover">` :
+                                        '<div class="w-full h-full flex items-center justify-center text-gray-400"><i class="fas fa-image"></i></div>'
+                                    }
+                                </div>
+                                <div class="flex-1">
+                                    <h5 class="font-bold text-gray-800 text-sm">${item.products?.name || 'Produk'}</h5>
+                                    <p class="text-xs text-gray-500">${item.quantity} x Rp${item.price?.toLocaleString('id-ID')}</p>
+                                </div>
+                                <span class="font-bold text-gray-800 text-sm">Rp${(item.quantity * item.price).toLocaleString('id-ID')}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                <div class="border-t pt-4">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">Subtotal</span>
+                        <span class="font-bold text-gray-800">Rp${order.total_price?.toLocaleString('id-ID')}</span>
+                    </div>
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-sm text-gray-600">Ongkir</span>
+                        <span class="font-bold text-gray-800">Rp${(order.shipping_cost || 0).toLocaleString('id-ID')}</span>
+                    </div>
+                    <div class="flex justify-between items-center pt-2 border-t">
+                        <span class="text-base font-bold text-gray-800">Total</span>
+                        <span class="text-xl font-black text-blue-600">Rp${order.total_price?.toLocaleString('id-ID')}</span>
+                    </div>
+                </div>
+                <div class="bg-blue-50 p-4 rounded-xl">
+                    <h4 class="font-bold text-blue-800 mb-3 text-sm">Informasi Pembeli</h4>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-user text-blue-600 text-xs"></i>
+                            <span class="text-gray-700">${order.profiles?.full_name || '-'}</span>
+                        </div>
+                        ${order.profiles?.phone ? `
+                            <div class="flex items-center gap-2">
+                                <i class="fas fa-phone text-blue-600 text-xs"></i>
+                                <span class="text-gray-700">${order.profiles.phone}</span>
+                            </div>
+                        ` : ''}
+                        ${order.profiles?.address ? `
+                            <div class="flex items-start gap-2">
+                                <i class="fas fa-map-marker-alt text-blue-600 text-xs mt-1"></i>
+                                <span class="text-gray-700">${order.profiles.address}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ${order.status === 'pending' ? `
+                    <div class="flex gap-3">
+                        <button onclick="updateOrderStatus('${order.id}', 'processing'); hideOrderDetail();" class="flex-1 bg-blue-600 text-white py-3 rounded-xl text-sm font-bold">Terima Pesanan</button>
+                        <button onclick="updateOrderStatus('${order.id}', 'cancelled'); hideOrderDetail();" class="flex-1 bg-red-100 text-red-600 py-3 rounded-xl text-sm font-bold">Tolak</button>
+                    </div>
+                ` : ''}
+                ${order.status === 'processing' ? `
+                    <button onclick="updateOrderStatus('${order.id}', 'shipped'); hideOrderDetail();" class="w-full bg-green-600 text-white py-3 rounded-xl text-sm font-bold">Konfirmasi Pengiriman</button>
+                ` : ''}
+            </div>
+        `;
+        document.getElementById('order-detail-modal').classList.remove('hidden');
+        tg.BackButton.show();
+    } catch (error) {
+        console.error('Error loading order detail:', error);
+        alert('Gagal memuat detail pesanan');
+    }
+}
+function hideOrderDetail() {
+    document.getElementById('order-detail-modal').classList.add('hidden');
+    tg.BackButton.hide();
+}
+// Update status pesanan
+async function updateOrderStatus(orderId, newStatus) {
+    try {
+        const { error } = await _supabase
+            .from('orders')
+            .update({ status: newStatus })
+            .eq('id', orderId);
+        if (error) throw error;
+        tg.showPopup({
+            title: 'Berhasil',
+            message: `Status pesanan berhasil diubah menjadi ${newStatus}`,
+            buttons: [{ type: 'ok' }]
+        });
+        loadOrders();
+        loadStats();
+    } catch (error) {
+        console.error('Error updating order status:', error);
+        tg.showPopup({
+            title: 'Error',
+            message: 'Gagal mengubah status pesanan',
+            buttons: [{ type: 'ok' }]
+        });
+    }
+}
+// Load produk
+async function loadProducts(sellerIdParam) {
+    const container = document.getElementById('products-container');
+    try {
+        const sid = sellerIdParam || sellerId;
+        if (!sid) {
+            container.innerHTML = `
+                <div class="text-center py-10">
+                    <i class="fas fa-exclamation-circle text-5xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-400 text-sm">Silakan login sebagai seller</p>
+                </div>
+            `;
+            return;
+        }
+        const { data: products, error } = await _supabase
+            .from('products')
+            .select('*')
+            .eq('seller_id', sid)
+            .order('created_at', { ascending: false });
+        if (error) throw error;
+        if (products && products.length > 0) {
+            container.innerHTML = products.map(prod => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex gap-4">
+                    <div class="w-20 h-20 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
+                        ${prod.image_url ?
+                            `<img src="${prod.image_url}" class="w-full h-full object-cover">` :
+                            '<div class="w-full h-full flex items-center justify-center text-gray-400"><i class="fas fa-image"></i></div>'
+                        }
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="font-bold text-gray-800 text-sm mb-1">${prod.name}</h3>
+                        <p class="text-xs text-gray-500 mb-2 line-clamp-2">${prod.description || 'Tidak ada deskripsi'}</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-blue-600 font-black text-sm">Rp${prod.price?.toLocaleString('id-ID')}</span>
+                            <span class="text-xs ${prod.stock > 0 ? 'text-green-600' : 'text-red-600'} font-bold">Stok: ${prod.stock || 0}</span>
+                        </div>
+                    </div>
+                    <button onclick="editProduct('${prod.id}')" class="text-gray-400 hover:text-blue-600"><i class="fas fa-edit"></i></button>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-10">
+                    <i class="fas fa-box-open text-5xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-400 text-sm">Belum ada produk</p>
+                    <button onclick="showAddProductModal()" class="mt-4 text-blue-600 text-xs font-bold">Tambah Produk Pertama</button>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading products:', error);
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-exclamation-circle text-5xl text-red-300 mb-4"></i>
+                <p class="text-red-400 text-sm">Gagal memuat produk</p>
+            </div>
+        `;
+    }
+}
+// Show/Hide modal tambah produk
+function showAddProductModal() {
+    document.getElementById('add-product-modal').classList.remove('hidden');
+    tg.BackButton.show();
+    tg.BackButton.onClick(() => {
+        hideAddProductModal();
+    });
+}
+function hideAddProductModal() {
+    document.getElementById('add-product-modal').classList.add('hidden');
+    tg.BackButton.hide();
+    tg.BackButton.offClick();
+}
+// Setup form submit
+function setupFormSubmit() {
+    document.getElementById('add-product-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('product-name').value;
+        const description = document.getElementById('product-description').value;
+        const price = parseInt(document.getElementById('product-price').value);
+        const stock = parseInt(document.getElementById('product-stock').value);
+        const imageUrl = document.getElementById('product-image').value;
+        try {
+            const { error } = await _supabase
+                .from('products')
+                .insert([{
+                    seller_id: sellerId,
+                    name,
+                    description,
+                    price,
+                    stock,
+                    image_url: imageUrl || null
+                }]);
+            if (error) throw error;
+            tg.showPopup({
+                title: 'Berhasil',
+                message: 'Produk berhasil ditambahkan',
+                buttons: [{ type: 'ok' }]
+            });
+            hideAddProductModal();
+            document.getElementById('add-product-form').reset();
+            loadProducts();
+            loadStats();
+        } catch (error) {
+            console.error('Error adding product:', error);
+            tg.showPopup({
+                title: 'Error',
+                message: 'Gagal menambahkan produk',
+                buttons: [{ type: 'ok' }]
+            });
+        }
+    });
+}
+// Load riwayat penjualan
+async function loadHistory(sellerIdParam) {
+    const container = document.getElementById('history-container');
+    try {
+        const { data: orders, error } = await _supabase
+            .from('orders')
+            .select(`
+                *,
+                profiles(full_name),
+                order_items(
+                    product_id,
+                    quantity,
+                    price,
+                    products(name)
+                )
+            `)
+            .in('status', ['completed', 'cancelled'])
+            .order('created_at', { ascending: false })
+            .limit(20);
+        if (error) throw error;
+        if (orders && orders.length > 0) {
+            container.innerHTML = orders.map(ord => `
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
+                    <div class="flex justify-between items-start mb-2">
+                        <div>
+                            <span class="text-[10px] font-bold text-gray-400">Order #${ord.id.slice(0,8)}</span>
+                            <h3 class="font-bold text-gray-800 text-sm">${ord.profiles?.full_name || 'Pembeli'}</h3>
+                        </div>
+                        <span class="${ord.status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} text-[10px] px-3 py-1 rounded-lg font-bold">${ord.status === 'completed' ? 'Selesai' : 'Dibatalkan'}</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mb-2">${ord.order_items?.map(i => i.products?.name).join(', ') || '-'}</p>
+                    <div class="flex justify-between items-center">
+                        <span class="text-xs text-gray-400">${new Date(ord.created_at).toLocaleDateString('id-ID')}</span>
+                        <span class="font-bold text-gray-800">Rp${ord.total_price?.toLocaleString('id-ID')}</span>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = `
+                <div class="text-center py-10">
+                    <i class="fas fa-history text-5xl text-gray-300 mb-4"></i>
+                    <p class="text-gray-400 text-sm">Belum ada riwayat penjualan</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading history:', error);
+        container.innerHTML = `
+            <div class="text-center py-10">
+                <i class="fas fa-exclamation-circle text-5xl text-red-300 mb-4"></i>
+                <p class="text-red-400 text-sm">Gagal memuat riwayat</p>
+            </div>
+        `;
+    }
+}
+// Edit produk (placeholder)
+function editProduct(productId) {
+    tg.showPopup({
+        title: 'Info',
+        message: 'Fitur edit produk akan segera hadir',
+        buttons: [{ type: 'ok' }]
+    });
+}
